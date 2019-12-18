@@ -1,0 +1,143 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+#include "resource.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// Neutral (Default) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_NEUD)
+LANGUAGE LANG_NEUTRAL,
+    SUBLANG_DEFAULT
+#pragma code_page(1252)
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        // Dialog
+        //
+
+        IDD_WININFO DIALOGEX 0,
+    0, 372,
+    159 STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME EXSTYLE WS_EX_OVERLAPPEDWINDOW |
+        WS_EX_COMPOSITED CAPTION "Flash Hooker" MENU IDR_MENU1 FONT 10,
+    "Consolas", 0, 0, 0x1 BEGIN EDITTEXT IDC_EDIT1, 0, 0, 272, 115,
+    ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | NOT WS_BORDER |
+        WS_VSCROLL END
+
+
+            /////////////////////////////////////////////////////////////////////////////
+            //
+            // AFX_DIALOG_LAYOUT
+            //
+
+            IDD_WININFO AFX_DIALOG_LAYOUT BEGIN 0 END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+                GUIDELINES DESIGNINFO BEGIN IDD_WININFO,
+    DIALOG BEGIN END END
+#endif    // APSTUDIO_INVOKED
+
+#endif    // Neutral (Default) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+        LANGUAGE LANG_ENGLISH,
+    SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+
+#ifdef APSTUDIO_INVOKED
+    /////////////////////////////////////////////////////////////////////////////
+    //
+    // TEXTINCLUDE
+    //
+
+    2 TEXTINCLUDE BEGIN "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+                        "#include windows.h\r\n"
+                        "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+                        "#include resource.h\r\n"
+                        "\0" END
+
+    3 TEXTINCLUDE BEGIN "\r\n"
+                        "\0" END
+
+#endif    // APSTUDIO_INVOKED
+
+
+                            /////////////////////////////////////////////////////////////////////////////
+                            //
+                            // Icon
+                            //
+
+                            // Icon with lowest ID value placed first to ensure application icon
+                            // remains consistent on all systems.
+                            IDI_ICON1 ICON "fps.ico"
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    //
+    // Menu
+    //
+
+    IDR_MENU1 MENU BEGIN POPUP "D3D" BEGIN MENUITEM "9",
+    ID_D3D_9, CHECKED MENUITEM "11", ID_D3D_11 END POPUP "Save" BEGIN MENUITEM "Frame timings", ID_SESSION_SAVE END POPUP "Licenses" BEGIN MENUITEM "Show",
+    ID_LICENSE_KIERO END POPUP "Buttons" BEGIN MENUITEM "A", ID_BUTTONS_A MENUITEM "B", ID_BUTTONS_B MENUITEM "X", ID_BUTTONS_X, CHECKED MENUITEM "Y",
+    ID_BUTTONS_Y END END
+
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United Kingdom) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENG)
+        LANGUAGE LANG_ENGLISH,
+    SUBLANG_ENGLISH_UK
+#pragma code_page(1252)
+
+#ifdef APSTUDIO_INVOKED
+    /////////////////////////////////////////////////////////////////////////////
+    //
+    // TEXTINCLUDE
+    //
+
+    1 TEXTINCLUDE BEGIN "resource.h\0" END
+
+#endif    // APSTUDIO_INVOKED
+
+#endif    // English (United Kingdom) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
