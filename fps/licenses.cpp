@@ -1,10 +1,10 @@
+#include <Windows.h>
 #include "licenses.h"
 
 namespace licenses {
 
-char const *text()
-{
-    return "\r\n\r\n"
+char const *text =
+    "\r\n\r\n"
            "Licenses:\r\n\r\n"
            "MinHook - The Minimalistic API Hooking Library for x64/x86\r\n"
            "Copyright (C) 2009-2017 Tsuda Kageyu.\r\n"
@@ -113,6 +113,7 @@ char const *text()
            "https://github.com/Rebzzel/kiero/blob/master/LICENSE\r\n"
            "\r\n"
            "\r\n";
-}
+
+int len = strlen(text);
 
 }    // namespace licenses

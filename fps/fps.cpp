@@ -28,7 +28,6 @@ char const *d3d11_text = "D3D11 - 32 bit";
 
 char const *keypath = "Software\\chs\\fps";
 
-HANDLE global_mutex_handle = null;
 HWND main_dlg = null;
 HANDLE pipe_handle;
 HANDLE pipe_handler_thread = null;
@@ -68,10 +67,11 @@ DWORD load_dword(char const *name, DWORD default_value)
 
 //////////////////////////////////////////////////////////////////////
 
+HANDLE exit_event;
+
 void set_exit_event()
 {
-    HANDLE e = CreateEvent(null, true, false, global_event_name);
-    SetEvent(e);
+    SetEvent(exit_event);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -88,47 +88,17 @@ void run_64bit()
 
 //////////////////////////////////////////////////////////////////////
 
-// you can murder this thread by closing the pipe_handle
-DWORD WINAPI handle_pipe_messages(void *)
-{
-    OutputDebugString("pipe handler starts\n");
-    pipe_handle = CreateNamedPipe(pipe_name, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS | PIPE_READMODE_MESSAGE,
-                                  PIPE_UNLIMITED_INSTANCES, pipe_buffer_size_bytes, pipe_buffer_size_bytes, 1000, null);
-    if(pipe_handle == INVALID_HANDLE_VALUE) {
-        OutputDebugString("Error creating pipe\n");
-        return 0;
-    }
-    if(!ConnectNamedPipe(pipe_handle, null) && GetLastError() != ERROR_PIPE_CONNECTED) {
-        OutputDebugString("Error waitinf for pipe connection\n");
-        CloseHandle(pipe_handle);
-        return 0;
-    }
-    char pipe_buffer[pipe_buffer_size_bytes];
-    OutputDebugString("handle_pipe_messages\n");
-    DWORD got;
-    while(true) {
-        if(!ReadFile(pipe_handle, pipe_buffer, pipe_buffer_size_bytes, &got, null)) {
-            OutputDebugString("pipe closed!?\n");
-            break;
-        }
-        OutputDebugString("MSG: ");
-        OutputDebugString(pipe_buffer);
-        OutputDebugString("\n");
-
-        HWND hEdit = GetDlgItem(main_dlg, 1002);
-        SendMessage(hEdit, EM_SETSEL, LONG_MAX, LONG_MAX);
-        SendMessage(hEdit, EM_REPLACESEL, 0, (LPARAM)got);
-    }
-    OutputDebugString("pipe handler thread exiting\n");
-    return 0;
-}
-
-//////////////////////////////////////////////////////////////////////
+HANDLE pipe_thread_start_event;
 
 void create_pipe()
 {
-    DWORD thread_id;
-    pipe_handler_thread = CreateThread(null, 0, handle_pipe_messages, null, 0, &thread_id);
+    pipe_thread_start_event = CreateEvent(null, true, false, null);
+    extern DWORD WINAPI pipe_server(void *exit_event_arg);
+    pipe_handler_thread = CreateThread(null, 0, pipe_server, (void *)exit_event, 0, null);
+    if(pipe_thread_start_event != null) {
+        WaitForSingleObject(pipe_thread_start_event, 1000);
+        CloseHandle(pipe_thread_start_event);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -140,10 +110,11 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_INITDIALOG:
         main_dlg = hDlg;
+        exit_event = CreateEvent(null, true, false, global_event_name);
         create_pipe();
         // run_64bit();
         install_kbd_hook();
-        SetTimer(hDlg, 1, 10, null);
+        SetTimer(hDlg, 1, 50, null);
         break;
 
     case WM_TIMER:
@@ -162,18 +133,16 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
         switch(LOWORD(wParam)) {
         case ID_LICENSE_KIERO:
-            // log(licenses::text());
+            log_raw(licenses::text, licenses::len);
             break;
         }
         break;
 
     case WM_CLOSE:
         set_exit_event();
-        // DisconnectNamedPipe(pipe_handle);
-        // CloseHandle(pipe_handle);
-        // if(WaitForSingleObject(pipe_handler_thread, 500) == WAIT_ABANDONED) {
-        //    TerminateThread(pipe_handler_thread, 0);
-        //}
+        if(WaitForSingleObject(pipe_handler_thread, 1000) == WAIT_ABANDONED) {
+            TerminateThread(pipe_handler_thread, 0);
+        }
         uninstall_kbd_hook();
         EndDialog(hDlg, 0);
         break;
@@ -190,7 +159,6 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
         MessageBox(null, "It's already running!", "FPS", MB_ICONINFORMATION);
     } else {
         DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_WININFO), NULL, dlg_proc, (LPARAM)NULL);
-        CloseHandle(global_mutex_handle);
     }
     return 0;
 }

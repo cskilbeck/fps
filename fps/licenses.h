@@ -2,6 +2,7 @@
 
 namespace licenses {
 
-	char const *text();
+	extern char const *text;
+    extern int len;
 
 } // licenses

@@ -258,6 +258,7 @@
   <ItemGroup>
     <ClCompile Include="fps.cpp" />
     <ClCompile Include="licenses.cpp" />
+    <ClCompile Include="pipe_server.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="fps.rc">
