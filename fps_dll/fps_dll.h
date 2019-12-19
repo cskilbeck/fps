@@ -1,8 +1,14 @@
+//////////////////////////////////////////////////////////////////////
+
 #pragma once
+
+//////////////////////////////////////////////////////////////////////
 
 #if defined(UNICODE)
 #error Unicode not supported
 #endif
+
+//////////////////////////////////////////////////////////////////////
 
 #ifdef DLL_EXPORTS
 #define DLL_API __declspec(dllexport)
@@ -10,18 +16,52 @@
 #define DLL_API __declspec(dllimport)
 #endif
 
+//////////////////////////////////////////////////////////////////////
+
 constexpr nullptr_t null = nullptr;
 
-extern DLL_API bool install_kbd_hook(HWND dlg);
+using int8 = __int8;
+using int16 = __int16;
+using int32 = __int32;
+using int64 = __int64;
+
+using uint8 = unsigned __int8;
+using uint16 = unsigned __int16;
+using uint32 = unsigned __int32;
+using uint64 = unsigned __int64;
+
+using byte = uint8;
+
+//////////////////////////////////////////////////////////////////////
+
+extern DLL_API bool install_kbd_hook();
 extern DLL_API void uninstall_kbd_hook();
 extern DLL_API void log(char const *text, ...);
 extern DLL_API void va_log(char const *text, va_list v);
-extern DLL_API void log_raw(char const *text);
-extern DLL_API void setup_buttons(uint32_t mask);
-extern DLL_API uint32_t get_button_mask();
+// extern DLL_API void log_raw(char const *text);
 
-struct frame_timings
+//////////////////////////////////////////////////////////////////////
+
+constexpr int pipe_buffer_size_bytes = 512;
+
+DECLSPEC_SELECTANY char const *pipe_name = "\\\\.\\pipe\\fps_pipe_D8961971-674C-48B3-A220-9452397DB57F";
+
+DECLSPEC_SELECTANY char const *global_mutex_32 = "Global\\fps_mutex_22AC5064-4CE4-4399-914C-7B6ABF4317C4";
+DECLSPEC_SELECTANY char const *global_mutex_64 = "Global\\fps_mutex_94470FA0-3D9D-4546-A1E9-E3F71654D7D4";
+
+DECLSPEC_SELECTANY char const *global_event_name = "Global\\fps_64_50FC63D0-ED19-442C-BBF1-5E29C31885C5";
+
+#if defined(_WIN64)
+DECLSPEC_SELECTANY char const *global_mutex = global_mutex_64;
+#else
+DECLSPEC_SELECTANY char const *global_mutex = global_mutex_32;
+#endif
+
+//////////////////////////////////////////////////////////////////////
+// mutex admin
+
+inline bool already_running()
 {
-    int num_timings;
-    double timings[60 * 60 * 60];
-};
+    // leak the handle, it will get closed when the process ends
+    return CreateMutex(null, false, global_mutex) == INVALID_HANDLE_VALUE && GetLastError() == ERROR_ALREADY_EXISTS;
+}

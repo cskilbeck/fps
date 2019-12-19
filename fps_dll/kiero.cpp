@@ -160,6 +160,7 @@ Status open_d3d11()
     if((D3D11CreateDeviceAndSwapChain_PTR = reinterpret_cast<D3D11CreateDeviceAndSwapChain_FN>(GetProcAddress(libD3D11, "D3D11CreateDeviceAndSwapChain"))) == null) {
         return Status::FunctionNotFound;
     }
+
     DXGI_RATIONAL refreshRate;
     refreshRate.Numerator = 60;
     refreshRate.Denominator = 1;

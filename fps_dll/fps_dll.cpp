@@ -1,60 +1,7 @@
 //////////////////////////////////////////////////////////////////////
-// Instructions
-// Run the correct (x86 or x64) version
-// Select D3D9 or D3D11 mode as appropriate
-// Run the game
-// Wait until the game is doing what you want to measure
-// Press `BACKTICK`
-// If you don't see a black rectangle in the top left corner:
-//      is there a joypad plugged in and registering correctly? (rectangle should be red in this case)
-//      is XInput1_3.dll available (rectangle should be cyan in this case)
-//      have you used the right bitness / dx version?
-//      check the hooker log window for any errors
-// if you do see a black rectangle, it should go white when you press the joypad button
-// if it doesn't go white when you press the joypad button, check the joypad is working in the control panel applet
-// if it's working, take measurements with the gadget
-
 // TODO (chs): make it work with titles which use RawInput (keyboard hook doesn't get called) by subclassing the title window and intercepting a custom message to toggle the hook
 
-// DONE (chs): make it save some settings somewhere (DX mode, button mask etc)
-// DONE (chs): option to save a csv with per-frame timing data
-// DONE (chs): deal with multiple simultaneous hook attempts (disallow)
-// DONE (chs): just hook through the keyboard hook
-// DONE (chs): add applicable foss licenses
-// DONE (chs): hook D3D11::Present()
-// DONE (chs): add controller reading code
-// DONE (chs): draw a rectangle inside hooked EndScene()
-// DONE (chs): hook D3D9::Present(), just count the frames
-// DONE (chs): need a way to report text back to the main dialog from the target process
-
-// NOPE (chs): log through named pipe to avoid message deadlock [wimpout - critical section instead]
-// NOPE (chs): measure difference if reading controller inside Present() vs GetMessage() [read the controller in BeginScene for D3D9]
-
-// NOTE about XInput1_3.dll:
-//      XInput1_3.dll (64 bit version) must exist in %WINDIR%\System32
-//      XInput1_3.dll (32 bit version) must exist in %WINDIR%\SysWOW64
-
-// NOTE about Shadow and Parsec
-//      If the remote controller isn't recognised, quit everything, unplug it, plug it back in, get the 'USB Game Controller' control panel applet up and check it's present
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//                                          Is      Works/w Works/w Works/w Works/w
-// Game                     DX      Bits    Steam?  Native  Shadow  Parsec	Polystream
-//////////////////////////////////////////////////////////////////////////////////////////
-// HL2                      9       32      Kinda   Yes     Yes     -       -
-// Portal 2                 9       32      Yes     Kinda   Kinda   -       -               [Problem with Portal gun always firing when controller connected]
-// World of Tanks           11      32      No      Yes     -       -       -
-// The Witness              11      64      Yes     Yes     Yes     Yes     -
-// Cuphead                  11      32      No      Yes     Yes     -       -
-// PUBG                     11      64      Yes     No      -       -       -               [BattleEye blocks DLL load]
-// CS:GO                    9       32      Yes     Yes     -       -       -
-// Marvel Puzzle Quest      9       32      Yes     Yes     -       -       -
-// Stellaris                9       32      Yes     Yes     -       -       -
-// Rise of the Tomb Raider  11      64      Yes     -       -       Yes     -
-
-
-
-#include <windows.h>
+#include <Windows.h>
 #include <xinput.h>
 #include <string.h>
 #include <stdarg.h>
@@ -91,13 +38,7 @@
 
 #pragma data_seg(".shared")
 
-HHOOK keyboard_hook_handle = null;                 // keyboard hook handle
-HWND main_dlg = null;                              // main dlg window for sending log messages to
-HMODULE hooked_process = null;                     // which process is hooked
-int constexpr max_frame_timings = 60 * 60 * 60;    // one hour at 60Hz, 15 minutes at 240Hz
-frame_timings timings{ 0 };
-uint32_t flash_buttons = XINPUT_GAMEPAD_A;    // which buttons make the fillrect flash
-UINT tilde_keycode = VK_OEM_3;
+HHOOK keyboard_hook_handle = null;    // keyboard hook handle
 
 #pragma data_seg()
 
@@ -109,6 +50,11 @@ namespace {
 
 // local (instanced) data section
 
+HANDLE pipe_handle = INVALID_HANDLE_VALUE;
+char pipe_buffer[pipe_buffer_size_bytes];
+
+UINT tilde_keycode = VK_OEM_3;
+HMODULE hooked_process = null;                      // which process is hooked
 HWND hooked_window = null;                          // HWND of the hooked window
 HINSTANCE dll_handle;                               // current DLL handle
 CRITICAL_SECTION log_critical_section;              // critsec for logging
@@ -249,6 +195,7 @@ double get_timestamp()
 
 //////////////////////////////////////////////////////////////////////
 
+#if 0
 void record_frame_time()
 {
     // do this for first 10 frames (rather than just 1) to allow the framerate to settle after hook installed
@@ -269,15 +216,16 @@ void record_frame_time()
         }
     }
 }
+#endif
 
 //////////////////////////////////////////////////////////////////////
 
 void log_summary()
 {
-    log("Frames: %d", timings.num_timings);
+    //    log("Frames: %d", timings.num_timings);
     double total_time = (previous_timestamp - first_timestamp) / clock_frequency;
     log("Total time: %f", total_time);
-    log("Average framerate: %f", 1.0 / (total_time / timings.num_timings));
+    //    log("Average framerate: %f", 1.0 / (total_time / timings.num_timings));
     frame_counter = 0;
 }
 
@@ -331,33 +279,6 @@ void warn(bool &warned, char const *message, ...)
 }
 
 //////////////////////////////////////////////////////////////////////
-
-void read_controller()
-{
-    static bool warned = false;
-    XINPUT_STATE controller_state;
-    HRESULT hr = XInput::GetState(0, &controller_state);
-    switch(hr) {
-    case ERROR_DEVICE_NOT_CONNECTED:
-        warn(warned, "\r\nERROR:No joypad connected in slot 0\r\n");
-        fill_color = error_no_controller_color;
-        break;
-    case E_NOT_VALID_STATE:
-        warn(warned, "\r\nERROR:XInput DLL missing\r\n");
-        fill_color = error_no_dll_color;
-        break;
-    case S_OK:
-        warned = false;
-        fill_color = ((controller_state.Gamepad.wButtons & flash_buttons) != 0) ? flash_color : idle_color;
-        break;
-    default:
-        warn(warned, "\r\nERROR reading controller: %08x", hr);
-        fill_color = error_unknown_error_color;
-        break;
-    }
-}
-
-//////////////////////////////////////////////////////////////////////
 // Present() draw a rectangle black or white depending on joypad button
 
 long __stdcall d3d9_present(LPDIRECT3DDEVICE9 pDevice, const RECT *r, const RECT *s, HWND h, const RGNDATA *d)
@@ -399,7 +320,7 @@ long __stdcall d3d9_present(LPDIRECT3DDEVICE9 pDevice, const RECT *r, const RECT
             }
         }
     }
-    record_frame_time();
+    // record_frame_time();
 
     static bool warned = false;
     HRESULT hr = pDevice->Clear(1, reinterpret_cast<D3DRECT const *>(&fill_rect), D3DCLEAR_TARGET, fill_color, 0, 0);    // ARGB
@@ -410,11 +331,7 @@ long __stdcall d3d9_present(LPDIRECT3DDEVICE9 pDevice, const RECT *r, const RECT
     pDevice->BeginScene();
     pDevice->EndScene();
 
-    long rc = d3d9_old_present(pDevice, r, s, h, d);
-
-    read_controller();
-
-    return rc;
+    return d3d9_old_present(pDevice, r, s, h, d);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -516,7 +433,7 @@ long __stdcall dxgi_present(IDXGISwapChain *swap_chain, UINT interval, UINT flag
             log("\r\n");
         }
     }
-    record_frame_time();
+    // record_frame_time();
 
     if(init_d3d11(swap_chain)) {
 
@@ -525,11 +442,7 @@ long __stdcall dxgi_present(IDXGISwapChain *swap_chain, UINT interval, UINT flag
         d3d11_device_context1->ClearView(d3d11_render_target_view.Get(), clear_color, reinterpret_cast<D3D11_RECT const *>(&fill_rect), 1);
     }
 
-    long rc = dxgi_old_present(swap_chain, interval, flags);
-
-    read_controller();
-
-    return rc;
+    return dxgi_old_present(swap_chain, interval, flags);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -544,9 +457,6 @@ bool setup_hook()
     log("Kiero init OK");
 
     hooked_process = GetModuleHandle(null);
-
-    // tell the main dialog where to get the frame timings from
-    SendMessage(main_dlg, WM_USER, 0, reinterpret_cast<LPARAM>(&timings));
 
     log("Adding D3D9 hook");
     MH_STATUS bind_status = kiero::bind(kiero::DXType::dx9, 17, (void **)&d3d9_old_present, d3d9_present);
@@ -641,26 +551,44 @@ LRESULT CALLBACK kbd_hook_proc(int code, WPARAM wparam, LPARAM lparam)
 
 //////////////////////////////////////////////////////////////////////
 
-void log_raw(char const *text)
+void va_log(char const *text, va_list v)
 {
+    int len = _vsnprintf_s(pipe_buffer, _countof(pipe_buffer) - 3, text, v);
+    if(len < 0) {
+        return;
+    }
+    char *c = pipe_buffer + len;
+    if(*c != '\r' && *c != '\n') {
+        *c++ = '\r';
+        *c++ = '\n';
+        *c++ = 0;
+        len += 3;
+    }
     InitOnceExecuteOnce(&log_init_once, InitCriticalSectionFN, null, null);
     EnterCriticalSection(&log_critical_section);
     {
-        HWND hEdit = GetDlgItem(main_dlg, 1002);
-        SendMessage(hEdit, EM_SETSEL, LONG_MAX, LONG_MAX);
-        SendMessage(hEdit, EM_REPLACESEL, 0, (LPARAM)((LPTSTR)text));
+        if(pipe_handle == INVALID_HANDLE_VALUE) {
+            for(int i = 0; i < 5; ++i) {
+                pipe_handle = CreateFile(pipe_name, GENERIC_READ | GENERIC_WRITE, 0, null, OPEN_EXISTING, 0, null);
+                if(pipe_handle != INVALID_HANDLE_VALUE) {
+                    return;
+                }
+                if(GetLastError() != ERROR_PIPE_BUSY) {
+                    return;
+                }
+                if(!WaitNamedPipe(pipe_name, 1000)) {
+                    return;
+                }
+            }
+            if(pipe_handle == INVALID_HANDLE_VALUE) {
+                return;
+            }
+        }
+        DWORD wrote;
+        WriteFile(pipe_handle, pipe_buffer, len, &wrote, null);
+        OutputDebugString(pipe_buffer);
     }
     LeaveCriticalSection(&log_critical_section);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void va_log(char const *text, va_list v)
-{
-    char buffer[4096];
-    _vsnprintf_s(buffer, _countof(buffer), text, v);
-    strcat_s(buffer, "\r\n");
-    log_raw(buffer);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -676,8 +604,9 @@ void log(char const *text, ...)
 
 BOOL APIENTRY DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 {
-    if(reason == DLL_PROCESS_ATTACH) {
+    switch(reason) {
 
+    case DLL_PROCESS_ATTACH: {
         dll_handle = (HINSTANCE)hModule;
         DisableThreadLibraryCalls(dll_handle);
         char module_name[MAX_PATH];
@@ -685,23 +614,23 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
         HANDLE exe_handle = GetModuleHandle(null);
         log("DLL Loaded: Process %p", exe_handle);
         log("%s", module_name);
-    } else if(reason == DLL_PROCESS_DETACH) {
+    } break;
+
+    case DLL_PROCESS_DETACH: {
         log("Process detach");
         HANDLE exe_handle = GetModuleHandle(null);
         if(exe_handle == hooked_process) {
             hook_removed();
         }
+    } break;
     }
-
     return TRUE;
 }
 
 //////////////////////////////////////////////////////////////////////
 
-bool install_kbd_hook(HWND dlg)
+bool install_kbd_hook()
 {
-    main_dlg = dlg;
-
     // find the VK_ keycode for the tilde key
     HKL keyboard_layout = GetKeyboardLayout(GetCurrentThreadId());
     if(keyboard_layout == null) {
@@ -733,18 +662,4 @@ void uninstall_kbd_hook()
         UnhookWindowsHookEx(keyboard_hook_handle);
         keyboard_hook_handle = null;
     }
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void setup_buttons(uint32_t mask)
-{
-    flash_buttons = mask;
-}
-
-//////////////////////////////////////////////////////////////////////
-
-uint32_t get_button_mask()
-{
-    return flash_buttons;
 }

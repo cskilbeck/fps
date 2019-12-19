@@ -1,4 +1,10 @@
 //////////////////////////////////////////////////////////////////////
+// Get fps64 running
+// Talk to fps64
+// Hook both D3D9 and D3D11 always
+// Check it works when multiple hooks installed (shared dataseg admin)
+// Minimize to systray
+// Drawing (9 & 11) with minimal impact on GPU
 
 #include <windows.h>
 #include <xinput.h>
@@ -8,6 +14,7 @@
 #include "..\fps_dll\minhook\include\MinHook.h"
 #include "..\fps_dll\kiero.h"
 #include "..\fps_dll\fps_dll.h"
+#include "..\fps_dll\defer.h"
 
 //////////////////////////////////////////////////////////////////////
 
@@ -19,14 +26,12 @@ char const *d3d9_text = "D3D9 - 32 bit";
 char const *d3d11_text = "D3D11 - 32 bit";
 #endif
 
-frame_timings *timings = null;
+char const *keypath = "Software\\chs\\fps";
 
-char const *keypath = "Software\\chs\\flash_hooker";
-char const *d3d_keyname = "D3DType";
-char const *button_mask_keyname = "Buttons";
-
-uint16_t buttons[] = { XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y };
-char const *button_names[] = { "A", "B", "X", "Y" };
+HANDLE global_mutex_handle = null;
+HWND main_dlg = null;
+HANDLE pipe_handle;
+HANDLE pipe_handler_thread = null;
 
 //////////////////////////////////////////////////////////////////////
 // REGISTRY STUFF
@@ -62,139 +67,68 @@ DWORD load_dword(char const *name, DWORD default_value)
 }
 
 //////////////////////////////////////////////////////////////////////
-// D3D MODE SET
 
-void set_d3d(HWND dlg, UINT id_on, UINT id_off, char const *window_txt, kiero::RenderType new_render_type)
+void set_exit_event()
 {
-    HMENU menu = GetMenu(dlg);
-    set_render_type(new_render_type);
-    CheckMenuItem(menu, id_off, MF_UNCHECKED);
-    CheckMenuItem(menu, id_on, MF_CHECKED);
-    SetWindowText(dlg, window_txt);
-}
-
-void set_d3d9_mode(HWND hDlg)
-{
-    log("Setting D3D9 mode");
-    set_d3d(hDlg, ID_D3D_9, ID_D3D_11, d3d9_text, kiero::RenderType::D3D9);
-}
-
-void set_d3d11_mode(HWND hDlg)
-{
-    log("Setting D3D11 mode");
-    set_d3d(hDlg, ID_D3D_11, ID_D3D_9, d3d11_text, kiero::RenderType::D3D11);
+    HANDLE e = CreateEvent(null, true, false, global_event_name);
+    SetEvent(e);
 }
 
 //////////////////////////////////////////////////////////////////////
 
-void load_d3d_state(HWND dlg)
+void run_64bit()
 {
-    switch(load_dword(d3d_keyname, kiero::RenderType::D3D11)) {
-    case kiero::RenderType::D3D11:
-        set_d3d11_mode(dlg);
-        break;
-    case kiero::RenderType::D3D9:
-        set_d3d9_mode(dlg);
-        break;
+    // run 64 bit exe, it will stop itself running more than once
+    // it will connect to the pipe and send messages that way
+    STARTUPINFO si = { 0 };
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi;
+    CreateProcess("fps64.exe", null, null, null, false, 0, null, null, &si, &pi);
+}
+
+//////////////////////////////////////////////////////////////////////
+
+// you can murder this thread by closing the pipe_handle
+DWORD WINAPI handle_pipe_messages(void *)
+{
+    OutputDebugString("pipe handler starts\n");
+    pipe_handle = CreateNamedPipe(pipe_name, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS | PIPE_READMODE_MESSAGE,
+                                  PIPE_UNLIMITED_INSTANCES, pipe_buffer_size_bytes, pipe_buffer_size_bytes, 1000, null);
+    if(pipe_handle == INVALID_HANDLE_VALUE) {
+        OutputDebugString("Error creating pipe\n");
+        return 0;
     }
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void save_d3d_state()
-{
-    save_dword(d3d_keyname, get_render_type());
-}
-
-//////////////////////////////////////////////////////////////////////
-// BUTTONS
-
-void update_button_menu(HWND hDlg)
-{
-    int button_menu_entries[] = { ID_BUTTONS_A, ID_BUTTONS_B, ID_BUTTONS_X, ID_BUTTONS_Y };
-    int buttons[] = { XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y };
-
-    uint32_t mask = get_button_mask();
-    HMENU menu = GetMenu(hDlg);
-
-    for(int i = 0; i < 4; ++i) {
-        bool checked = (buttons[i] & mask) != 0;
-        CheckMenuItem(menu, button_menu_entries[i], MF_BYCOMMAND | ((checked ? MF_CHECKED : MF_UNCHECKED)));
+    if(!ConnectNamedPipe(pipe_handle, null) && GetLastError() != ERROR_PIPE_CONNECTED) {
+        OutputDebugString("Error waitinf for pipe connection\n");
+        CloseHandle(pipe_handle);
+        return 0;
     }
-}
-
-//////////////////////////////////////////////////////////////////////
-// a set bit in mask toggles that bit in button_mask
-
-void toggle_button(HWND hDlg, uint32_t toggle_bits)
-{
-    uint32_t current_buttons = get_button_mask() ^ toggle_bits;
-    if(current_buttons == 0) {
-        log("WARNING! BUTTON MASK IS EMPTY, IT WILL NEVER FLASH!");
-    }
-    setup_buttons(current_buttons);
-    update_button_menu(hDlg);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void load_buttons(HWND dlg)
-{
-    setup_buttons(load_dword(button_mask_keyname, XINPUT_GAMEPAD_A));
-    update_button_menu(dlg);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void save_buttons()
-{
-    save_dword(button_mask_keyname, get_button_mask());
-}
-
-//////////////////////////////////////////////////////////////////////
-// SESSION SAVE
-
-void do_session_save(HWND hwnd)
-{
-    if(timings == null || timings->num_timings == 0) {
-        log("Can't save an empty session!?");
-        MessageBox(null, "No session data has been recorded yet", "No session data", MB_ICONEXCLAMATION);
-        return;
-    }
-
-    OPENFILENAME ofn;
-    char filename[MAX_PATH];
-
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = hwnd;
-    ofn.lpstrFile = filename;
-    ofn.lpstrFile[0] = '\0';    // Set lpstrFile[0] to '\0' so that GetOpenFileName does not use the contents of szFile to initialize itself.
-    ofn.nMaxFile = sizeof(filename);
-    ofn.lpstrFilter = "All (*.*)\0*.*\0CSV (*.csv)\0*.csv\0";
-    ofn.nFilterIndex = 2;
-    ofn.lpstrFileTitle = NULL;
-    ofn.nMaxFileTitle = 0;
-    ofn.lpstrInitialDir = NULL;
-    ofn.lpstrTitle = "Save session data to CSV file";
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN;
-
-    if(GetSaveFileName(&ofn) == FALSE) {
-        log("Save session filename dialog cancelled");
-    } else {
-        log("Saving %d frame times to to %s", timings->num_timings, filename);
-        FILE *f;
-        errno_t e = fopen_s(&f, filename, "w");
-        if(f == null) {
-            log("Error opening file: %d", e);
-            return;
+    char pipe_buffer[pipe_buffer_size_bytes];
+    OutputDebugString("handle_pipe_messages\n");
+    DWORD got;
+    while(true) {
+        if(!ReadFile(pipe_handle, pipe_buffer, pipe_buffer_size_bytes, &got, null)) {
+            OutputDebugString("pipe closed!?\n");
+            break;
         }
-        for(int i = 0; i < timings->num_timings; ++i) {
-            fprintf(f, "%f\n", timings->timings[i] * 0.0000001);
-        }
-        fclose(f);
-        log("Done");
+        OutputDebugString("MSG: ");
+        OutputDebugString(pipe_buffer);
+        OutputDebugString("\n");
+
+        HWND hEdit = GetDlgItem(main_dlg, 1002);
+        SendMessage(hEdit, EM_SETSEL, LONG_MAX, LONG_MAX);
+        SendMessage(hEdit, EM_REPLACESEL, 0, (LPARAM)got);
     }
+    OutputDebugString("pipe handler thread exiting\n");
+    return 0;
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void create_pipe()
+{
+    DWORD thread_id;
+    pipe_handler_thread = CreateThread(null, 0, handle_pipe_messages, null, 0, &thread_id);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -205,9 +139,10 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch(uMsg) {
 
     case WM_INITDIALOG:
-        install_kbd_hook(hDlg);
-        load_d3d_state(hDlg);
-        load_buttons(hDlg);
+        main_dlg = hDlg;
+        create_pipe();
+        // run_64bit();
+        install_kbd_hook();
         SetTimer(hDlg, 1, 10, null);
         break;
 
@@ -224,47 +159,21 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         MoveWindow(edit_ctrl, 0, 0, r.right, r.bottom, TRUE);
     } break;
 
-    case WM_USER: {
-        // LPARAM: ptr to frame timing buffer
-        // WPARAM: ptr to frame timing counter
-        if(timings == null) {
-            log("Got frame timings at %p", lParam);
-            timings = reinterpret_cast<frame_timings *>(lParam);
-        }
-    } break;
-
     case WM_COMMAND:
         switch(LOWORD(wParam)) {
-        case ID_BUTTONS_A:
-            toggle_button(hDlg, XINPUT_GAMEPAD_A);
-            break;
-        case ID_BUTTONS_B:
-            toggle_button(hDlg, XINPUT_GAMEPAD_B);
-            break;
-        case ID_BUTTONS_X:
-            toggle_button(hDlg, XINPUT_GAMEPAD_X);
-            break;
-        case ID_BUTTONS_Y:
-            toggle_button(hDlg, XINPUT_GAMEPAD_Y);
-            break;
-        case ID_D3D_9:
-            set_d3d9_mode(hDlg);
-            break;
-        case ID_D3D_11:
-            set_d3d11_mode(hDlg);
-            break;
         case ID_LICENSE_KIERO:
-            log_raw(licenses::text());
-            break;
-        case ID_SESSION_SAVE:
-            do_session_save(hDlg);
+            // log(licenses::text());
             break;
         }
         break;
 
     case WM_CLOSE:
-        save_d3d_state();
-        save_buttons();
+        set_exit_event();
+        // DisconnectNamedPipe(pipe_handle);
+        // CloseHandle(pipe_handle);
+        // if(WaitForSingleObject(pipe_handler_thread, 500) == WAIT_ABANDONED) {
+        //    TerminateThread(pipe_handler_thread, 0);
+        //}
         uninstall_kbd_hook();
         EndDialog(hDlg, 0);
         break;
@@ -277,6 +186,11 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
-    DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_WININFO), NULL, dlg_proc, (LPARAM)NULL);
+    if(already_running()) {
+        MessageBox(null, "It's already running!", "FPS", MB_ICONINFORMATION);
+    } else {
+        DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_WININFO), NULL, dlg_proc, (LPARAM)NULL);
+        CloseHandle(global_mutex_handle);
+    }
     return 0;
 }
