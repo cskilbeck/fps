@@ -475,6 +475,7 @@ bool setup_hook()
         log("D3D9 bind() complete");
     }
 
+    log("Adding D3D11 hook");
     bind_status = kiero::bind(kiero::DXType::dx11, 8, (void **)&dxgi_old_present, dxgi_present);
     if(bind_status != MH_OK) {
         log("Error binding DXGI::Present: %08x (%s)", bind_status, MH_StatusToString(bind_status));

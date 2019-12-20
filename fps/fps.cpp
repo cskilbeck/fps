@@ -136,6 +136,7 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         HWND hEdit = GetDlgItem(main_dlg, IDC_EDIT1);
         SendMessage(hEdit, EM_SETSEL, LONG_MAX, LONG_MAX);
         SendMessage(hEdit, EM_REPLACESEL, 0, lParam);
+        OutputDebugString((char const *)lParam);
         delete[](char *) lParam;    // lame!
     } break;
 

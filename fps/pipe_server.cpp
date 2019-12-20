@@ -13,7 +13,6 @@
 #define FAIL(x, ...)               \
     do {                           \
         debug_log(x, __VA_ARGS__); \
-        DebugBreak();              \
     } while(false)
 #else
 #define FAIL(...)
@@ -32,7 +31,7 @@ enum class pipe_state_t : int
 
 //////////////////////////////////////////////////////////////////////
 
-constexpr int pipe_count = 4;
+constexpr int pipe_count = 8;
 constexpr int pipe_timeout = 5000;
 
 //////////////////////////////////////////////////////////////////////

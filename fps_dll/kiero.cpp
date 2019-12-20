@@ -231,13 +231,18 @@ void close_d3d11()
 kiero::Status kiero::open()
 {
     if(MH_Initialize() != MH_OK) {
+        debug_log("MH_Initialize() failed");
         return Status::InitHookerFailed;
     }
     Status s9 = open_d3d9();
-    if(s9 == Status::Success) {
-        s9 = open_d3d11();
-    }
     if(s9 != Status::Success) {
+        debug_log("open_d3d9() failed");
+        close();
+        return s9;
+    }
+    s9 = open_d3d11();
+    if(s9 != Status::Success) {
+        debug_log("open_d3d11() failed");
         close();
     }
     return s9;
