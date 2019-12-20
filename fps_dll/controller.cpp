@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdio.h>
 #include <xinput.h>
 #include "minhook/include/MinHook.h"
 #include "kiero.h"

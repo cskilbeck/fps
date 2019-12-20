@@ -69,21 +69,19 @@ DWORD load_dword(char const *name, DWORD default_value)
 
 HANDLE exit_event;
 
-void set_exit_event()
-{
-    SetEvent(exit_event);
-}
-
 //////////////////////////////////////////////////////////////////////
 
 void run_64bit()
 {
     // run 64 bit exe, it will stop itself running more than once
     // it will connect to the pipe and send messages that way
+    debug_log("Spawning x64 handler");
     STARTUPINFO si = { 0 };
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
-    CreateProcess("fps64.exe", null, null, null, false, 0, null, null, &si, &pi);
+    if(CreateProcess("fps64.exe", null, null, null, false, 0, null, null, &si, &pi) == 0) {
+        debug_log("CreateProcess failed: %08x", GetLastError());
+    }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -95,7 +93,9 @@ void create_pipe()
     pipe_thread_start_event = CreateEvent(null, true, false, null);
     extern DWORD WINAPI pipe_server(void *exit_event_arg);
     pipe_handler_thread = CreateThread(null, 0, pipe_server, (void *)exit_event, 0, null);
-    if(pipe_thread_start_event != null) {
+    if(pipe_handler_thread == null) {
+        debug_log("ERROR CreateThread(pipe_server): %08x", GetLastError());
+    } else if(pipe_thread_start_event != null) {
         WaitForSingleObject(pipe_thread_start_event, 1000);
         CloseHandle(pipe_thread_start_event);
     }
@@ -109,18 +109,20 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch(uMsg) {
 
     case WM_INITDIALOG:
+        debug_log("WM_INITDIALOG");
         main_dlg = hDlg;
         exit_event = CreateEvent(null, true, false, global_event_name);
         create_pipe();
-        // run_64bit();
+        run_64bit();
         install_kbd_hook();
         SetTimer(hDlg, 1, 50, null);
         break;
 
-    case WM_TIMER:
+    case WM_TIMER: {
         KillTimer(hDlg, 1);
-        SendMessage(GetDlgItem(hDlg, IDC_EDIT1), EM_SETSEL, -1, -1);    // ffs remove selection from edit control
-        break;
+        HWND edit_ctrl = GetDlgItem(hDlg, IDC_EDIT1);
+        SendMessage(edit_ctrl, EM_SETSEL, LONG_MAX, LONG_MAX);
+    } break;
 
     case WM_SIZE:
     case WM_SIZING: {
@@ -128,6 +130,13 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         HWND edit_ctrl = GetDlgItem(hDlg, IDC_EDIT1);
         GetClientRect(hDlg, &r);
         MoveWindow(edit_ctrl, 0, 0, r.right, r.bottom, TRUE);
+    } break;
+
+    case WM_USER: {
+        HWND hEdit = GetDlgItem(main_dlg, IDC_EDIT1);
+        SendMessage(hEdit, EM_SETSEL, LONG_MAX, LONG_MAX);
+        SendMessage(hEdit, EM_REPLACESEL, 0, lParam);
+        delete[](char *) lParam;    // lame!
     } break;
 
     case WM_COMMAND:
@@ -139,7 +148,7 @@ INT_PTR CALLBACK dlg_proc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_CLOSE:
-        set_exit_event();
+        SetEvent(exit_event);
         if(WaitForSingleObject(pipe_handler_thread, 1000) == WAIT_ABANDONED) {
             TerminateThread(pipe_handler_thread, 0);
         }

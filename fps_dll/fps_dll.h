@@ -62,3 +62,17 @@ inline bool already_running()
     // leak the handle, it will get closed when the process ends
     return CreateMutex(null, false, global_mutex) == INVALID_HANDLE_VALUE && GetLastError() == ERROR_ALREADY_EXISTS;
 }
+
+//////////////////////////////////////////////////////////////////////
+
+inline void debug_log(char const *f, ...)
+{
+    va_list v;
+    va_start(v, f);
+    char buffer[512];
+    int len = vsnprintf_s(buffer, _countof(buffer) - 2, f, v);
+    // assert(len > 0);
+    buffer[len] = '\n';
+    buffer[len + 1] = 0;
+    OutputDebugString(buffer);
+}

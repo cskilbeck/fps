@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include <Windows.h>
+#include <stdio.h>
 #include <d3d9.h>
 #include <dxgi.h>
 #include <d3d10_1.h>
