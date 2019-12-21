@@ -75,11 +75,21 @@ void run_64bit()
 {
     // run 64 bit exe, it will stop itself running more than once
     // it will connect to the pipe and send messages that way
+    char module_path[MAX_PATH];
+    char module_filename[MAX_PATH];
+    char *filepart;
+    GetModuleFileName(NULL, module_filename, MAX_PATH);
+    GetFullPathName(module_filename, MAX_PATH, module_path, &filepart);
+    if(filepart != null) {
+        *filepart = 0;
+    }
+    SetCurrentDirectory(module_path);
+    debug_log("Changing directory to %s", module_path);
     debug_log("Spawning x64 handler");
     STARTUPINFO si = { 0 };
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
-    if(CreateProcess("fps64.exe", null, null, null, false, 0, null, null, &si, &pi) == 0) {
+    if(CreateProcess("fps64_x64.exe", null, null, null, false, 0, null, null, &si, &pi) == 0) {
         debug_log("CreateProcess failed: %08x", GetLastError());
     }
 }

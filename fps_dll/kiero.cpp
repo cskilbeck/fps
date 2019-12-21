@@ -136,12 +136,14 @@ Status open_d3d11()
     windowClass.hIconSm = null;
 
     if(!RegisterClassEx(&windowClass)) {
+        log("open_d3d11: RegisterClassFailed");
         return Status::RegisterClassFailed;
     }
     defer(UnregisterClass(windowClass.lpszClassName, windowClass.hInstance));
 
     HWND window = CreateWindow(windowClass.lpszClassName, "Kiero DirectX Window", WS_OVERLAPPEDWINDOW, 0, 0, 100, 100, null, null, windowClass.hInstance, null);
     if(window == null) {
+        log("open_d3d11: CreateWindowFailed");
         return Status::CreateWindowFailed;
     }
     defer(DestroyWindow(window));
@@ -155,10 +157,12 @@ Status open_d3d11()
     D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
 
     if((libD3D11 = GetModuleHandle("d3d11.dll")) == null) {
+        log("open_d3d11: ModuleNotFoundError");
         return Status::ModuleNotFoundError;
     }
 
     if((D3D11CreateDeviceAndSwapChain_PTR = reinterpret_cast<D3D11CreateDeviceAndSwapChain_FN>(GetProcAddress(libD3D11, "D3D11CreateDeviceAndSwapChain"))) == null) {
+        log("open_d3d11: FunctionNotFound");
         return Status::FunctionNotFound;
     }
 
@@ -190,6 +194,7 @@ Status open_d3d11()
 
     if(FAILED(D3D11CreateDeviceAndSwapChain_PTR(null, D3D_DRIVER_TYPE_HARDWARE, null, 0, featureLevels, _countof(featureLevels), D3D11_SDK_VERSION, &swapChainDesc, &swapChain,
                                                 &device11, &featureLevel, &context))) {
+        log("open_d3d11: CreateDeviceFailed");
         return Status::CreateDeviceFailed;
     }
     scoped[=]
@@ -237,15 +242,16 @@ kiero::Status kiero::open()
     Status s9 = open_d3d9();
     if(s9 != Status::Success) {
         debug_log("open_d3d9() failed");
-        close();
-        return s9;
     }
-    s9 = open_d3d11();
+    Status s11 = open_d3d11();
     if(s9 != Status::Success) {
         debug_log("open_d3d11() failed");
-        close();
+        if(s11 != Status::Success) {
+            close();
+            return s11;
+        }
     }
-    return s9;
+    return Status::Success;
 }
 
 //////////////////////////////////////////////////////////////////////
